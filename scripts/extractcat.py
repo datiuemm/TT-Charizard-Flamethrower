@@ -5,7 +5,7 @@ from gamma import gamma_correct, dither_correct
 # -------------------------------------------------------
 # Config
 # -------------------------------------------------------
-NAME = "fire"  # Bạn chỉ cần đổi tên ở đây
+NAME = os.environ.get("NYAN_NAME", "mander")
 
 GIF_PATH = f"{NAME}.gif"
 # Background color (white) – index 0 in our 8-color palette
@@ -51,7 +51,7 @@ mosaic_rgb = np.array(mosaic)   # shape (H, W, 3)
 # Mask near-white pixels with a placeholder (pure black) so they don't
 # consume one of our precious 7 color slots. We'll remap them back to
 # palette index 0 (background/white) later during frame processing.
-WHITE_THRESH = 180
+WHITE_THRESH = 220
 is_nearly_white = np.all(mosaic_rgb >= WHITE_THRESH, axis=2)  # (H, W) bool
 mosaic_masked = mosaic_rgb.copy()
 mosaic_masked[is_nearly_white] = [0, 0, 0]  # placeholder for quantization
