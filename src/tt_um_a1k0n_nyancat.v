@@ -1,237 +1,178 @@
 /*
- * Copyright (c) 2024 Andy Sloane
- * SPDX-License-Identifier: Apache-2.0
- * Modified for Charizard Display (No Rainbow, No Glasses, 64x32 Window)
+ * Project: Nyan Cat Evolution (Mander -> Melon -> Zizard)
+ * Features: Rain effect, Evolution Logic, Fixed Ground/Sky rendering
  */
 
 `default_nettype none
 
 module tt_um_a1k0n_nyancat(
-  input  wire [7:0] ui_in,    // Dedicated inputs
-  output wire [7:0] uo_out,   // Dedicated outputs
-  input  wire [7:0] uio_in,   // IOs: Input path
-  output wire [7:0] uio_out,  // IOs: Output path
-  output wire [7:0] uio_oe,   // IOs: Enable path (active high: 0=input, 1=output)
-  input  wire       ena,      // always 1 when the design is powered
-  input  wire       clk,      // clock
-  input  wire       rst_n     // reset_n - low to reset
+    input  wire [7:0] ui_in,    // Gamepad: [6]=Data, [5]=Clk, [4]=Latch
+    output wire [7:0] uo_out,   // VGA: {hsync, B0, G0, R0, vsync, B1, G1, R1}
+    input  wire [7:0] uio_in,
+    output wire [7:0] uio_out,
+    output wire [7:0] uio_oe,
+    input  wire       ena, clk, rst_n
 );
 
-  // VGA signals
-  wire hsync;
-  wire vsync;
-  reg [1:0] R;
-  reg [1:0] G;
-  reg [1:0] B;
-  wire video_active;
-  wire [9:0] pix_x;
-  wire [9:0] pix_y;
+    // --- VGA SIGNALS ---
+    wire hsync, vsync, video_active;
+    wire [9:0] pix_x, pix_y;
+    reg [1:0] R, G, B;
+    assign uo_out = {hsync, B[0], G[0], R[0], vsync, B[1], G[1], R[1]};
 
-  // TinyVGA PMOD mapping
-  assign uo_out = {hsync, B[0], G[0], R[0], vsync, B[1], G[1], R[1]};
+    hvsync_generator hvsync_gen(
+        .clk(clk), .reset(~rst_n), .hsync(hsync), .vsync(vsync),
+        .display_on(video_active), .hpos(pix_x), .vpos(pix_y)
+    );
 
-  // Audio and IO setup
-  assign uio_out[7] = audio_pwm;
-  assign uio_out[6:0] = 0;
-  assign uio_oe[7] = 1;
-  assign uio_oe[6:0] = 0;
+    // --- GAMEPAD ---
+    wire g_up, g_down, g_start;
+    gamepad_pmod_single gp(
+        .rst_n(rst_n), .clk(clk), 
+        .pmod_data(ui_in[6]), .pmod_clk(ui_in[5]), .pmod_latch(ui_in[4]), 
+        .start(g_start), .up(g_up), .down(g_down)
+    );
 
-  // ------ VIDEO LOGIC ------
+    // --- EVOLUTION & FLASH ---
+    reg [1:0] evo_state; // 0: Mander, 1: Melon, 2: Zizard
+    reg [5:0] pattern_cnt;
+    reg [5:0] flash_tmr;
+    reg is_firing;
+    reg u_prev, d_prev;
 
-  reg [7:0] frame_count;
-  reg [2:0] nyanframe;
-  reg [6:0] line_lfsr;
-  wire [6:0] line_lfsr_next = {line_lfsr[0], line_lfsr[0]^line_lfsr[6], line_lfsr[5:1]};
+    // --- ROMS & PALETTE ---
+    reg [2:0] rom_mander[0:16383], rom_melon[0:16383], rom_zizard[0:16383], rom_fire[0:16383];
+    reg [3:0] pal_r[0:7], pal_g[0:7], pal_b[0:7];
 
-  hvsync_generator hvsync_gen(
-    .clk(clk),
-    .reset(~rst_n),
-    .hsync(hsync),
-    .vsync(vsync),
-    .display_on(video_active),
-    .hpos(pix_x),
-    .vpos(pix_y)
-  );
-  
-  wire [9:0] moving_x = pix_x + (frame_count<<2);
-
-  // Palette memory
-  reg [3:0] palette_r[0:7];
-  reg [3:0] palette_g[0:7];
-  reg [3:0] palette_b[0:7];
-  initial begin
-    $readmemh("../data/palette_r.hex", palette_r);
-    $readmemh("../data/palette_g.hex", palette_g);
-    $readmemh("../data/palette_b.hex", palette_b);
-  end
-
-  // Character sprite memory (64x32 per frame)
-  reg [2:0] nyan[0:16383];
-  initial begin
-    $readmemh("../data/nyan.hex", nyan);
-  end
-
-  // Dithering (Bayer Matrix)
-  wire bi = pix_x[0:0] ^ frame_count[0];
-  wire bj = pix_y[0:0] ^ frame_count[0];
-  wire bx = bi ^ bj;
-  wire [1:0] bayer = {bx, bi};
-
-  // Sinusoidal movement (Oscillation)
-  reg signed [6:0] cos;
-  reg signed [6:0] sin;
-  wire signed [6:0] cos_ = cos - (sin>>>4);
-  wire signed [6:0] sin_ = sin + (cos_>>>4);
-
-  // Coordinates for the 64x32 Sprite
-  wire [5:0] nyan_x_offset = sin[6:1] ^ 6'h20;
-  wire [9:0] nyan_x = pix_x - 222 + {3'b0, nyan_x_offset};
-  wire [7:0] nyan_y = (pix_y - 152) >> 3; // Upscale 8x
-
-  // Extended window check: 64 wide (8x8 chunks -> nyan_x < 512, but we use index)
-  // Logic: nyan_x / 8 = pixel index. (nyan_x[8:3] handles the 64 pixels width)
-  // Mở rộng nyan_y < 32 để thấy hết Charizard
-  wire [2:0] idx = ((nyan_x < 512) && (nyan_y < 32)) ? nyan[{nyanframe, nyan_y[4:0], nyan_x[8:3]}] : 3'b000;
-
-  // Starfield logic
-  wire star = (idx == 0) && (moving_x[9:3] == line_lfsr);
-
-  // Final Color Multiplexer (No Rainbow, No Glasses)
-  // Ưu tiên: Nhân vật (idx) -> Sao (star) -> Nền (idx 0)
-  wire [3:0] r_raw = (idx != 0) ? palette_r[idx] : (star ? 4'hc : palette_r[0]);
-  wire [3:0] g_raw = (idx != 0) ? palette_g[idx] : (star ? 4'hc : palette_g[0]);
-  wire [3:0] b_raw = (idx != 0) ? palette_b[idx] : (star ? 4'hc : palette_b[0]);
-
-  // Apply dithering to the 4-bit color
-  wire [3:0] dr = r_raw + {2'b0, bayer};
-  wire [3:0] dg = g_raw + {2'b0, bayer};
-  wire [3:0] db = b_raw + {2'b0, bayer};
-
-  // ------ AUDIO LOGIC (Giữ nguyên) ------
-
-  reg [1:0] melody_oct [0:511];
-  reg [2:0] melody_note [0:511];
-  reg melody_trigger [0:511];
-  reg [1:0] bass_oct [0:511];
-  reg [2:0] bass_note [0:511];
-  reg bass_trigger [0:511];
-  reg kick_trigger [0:511];
-  initial begin
-    $readmemh("../data/melodyoct.hex", melody_oct);
-    $readmemh("../data/melodynote.hex", melody_note);
-    $readmemh("../data/melodytrigger.hex", melody_trigger);
-    $readmemh("../data/bassoct.hex", bass_oct);
-    $readmemh("../data/bassnote.hex", bass_note);
-    $readmemh("../data/basstrigger.hex", bass_trigger);
-    $readmemh("../data/kicktrigger.hex", kick_trigger);
-  end
-
-  reg [7:0] noteinctable [0:7];
-  reg [7:0] noteinctable2 [0:7];
-  initial begin
-    $readmemh("../data/noteinc.hex", noteinctable);
-    $readmemh("../data/noteinc.hex", noteinctable2);
-  end
-
-  reg [15:0] bass_pha;
-  wire [2:0] cur_bass_note = bass_note[songpos];
-  wire [1:0] cur_bass_oct = bass_oct[songpos];
-  wire [8:0] bass_inc = kick_on ? kick_osci : {1'b0, noteinctable[cur_bass_note]};
-  wire bass_on = 
-    cur_bass_oct == 3 ? bass_pha[12] :
-    cur_bass_oct == 2 ? bass_pha[13] :
-    cur_bass_oct == 1 ? bass_pha[14] :
-    bass_pha[15];
-  wire [5:0] bass_sample = kick_on ? (bass_pha[15] ? 6'd63 : 6'd0) : (bass_on ? bass_vol : 6'd0);
-  reg [5:0] bass_vol;
-
-  reg [12:0] sqr_pha;
-  wire [2:0] cur_melody_note = melody_note[songpos];
-  wire [1:0] cur_melody_oct = melody_oct[songpos];
-  wire [7:0] sqr_inc = noteinctable2[cur_melody_note];
-  wire sqr_on = (cur_melody_oct == 2) ? (sqr_pha[10]&sqr_pha[9]) : (cur_melody_oct == 1) ? (sqr_pha[11]&sqr_pha[10]) : (sqr_pha[12]&sqr_pha[11]);
-  wire [5:0] sqr_sample = sqr_on ? sqr_vol : 6'd0;
-  reg [5:0] sqr_vol;
-
-  reg [1:0] kick_ctr;
-  wire kick_on = kick_ctr != 0;
-  reg [8:0] kick_osci;
-
-  reg [9:0] audio_sample_lpf;
-  wire [6:0] audio_sample = sqr_sample + bass_sample;
-  reg [9:0] audio_pwm_accum;
-  wire [10:0] audio_pwm_accum_next = audio_pwm_accum + audio_sample_lpf;
-  wire audio_pwm = audio_pwm_accum_next[10];
-
-  reg [2:0] sample_beat_ctr;
-  reg [0:0] song_loops;
-  reg [8:0] songpos;
-  wire [8:0] songpos_next = (songpos == 287) ? 9'd32 : (songpos + 9'd1);
-
-  task new_beat;
-    begin
-      songpos <= songpos_next;
-      if (songpos == 287) song_loops <= song_loops + 1;
-      if (melody_trigger[songpos_next]) sqr_vol <= 6'd63;
-      if (bass_trigger[songpos_next])   bass_vol <= 6'd63;
-      if (kick_trigger[songpos_next]) begin
-        kick_ctr <= 2'd1;
-        kick_osci <= 9'h180;
-      end
+    initial begin
+        $readmemh("../data/mander.hex", rom_mander);
+        $readmemh("../data/melon.hex", rom_melon);
+        $readmemh("../data/zizard.hex", rom_zizard); // Sửa đúng tên zizard
+        $readmemh("../data/fire.hex",   rom_fire);
+        $readmemh("../data/palette_r.hex", pal_r);
+        $readmemh("../data/palette_g.hex", pal_g);
+        $readmemh("../data/palette_b.hex", pal_b);
     end
-  endtask
 
-  task new_tick;
-    begin
-      if (sample_beat_ctr + 1 == 6) begin
-        sample_beat_ctr <= 0;
-        new_beat;
-      end else begin
-        sample_beat_ctr <= sample_beat_ctr + 1;
-        sqr_vol <= sqr_vol - (sqr_vol>>3);
-        bass_vol <= bass_vol - (bass_vol>>2);
-        if (kick_ctr != 0) begin
-          kick_ctr <= kick_ctr + 1;
-          kick_osci <= kick_osci - (kick_osci>>3);
+    // --- ANIMATION & RAIN LFSR ---
+    reg [7:0] frame_count;
+    reg [2:0] nyanframe;
+    reg [6:0] line_lfsr;
+    wire [6:0] line_lfsr_next = {line_lfsr[0], line_lfsr[0]^line_lfsr[6], line_lfsr[5:1]};
+
+    // --- RENDERING LOGIC ---
+    wire [9:0] nx = pix_x - 64;
+    reg [7:0] ny;
+    
+    always @* begin
+        // Giữ offset 145 để nhân vật không bị mất phần trên (cổ)
+        ny = (pix_y - 145) >> 3; 
+    end
+
+    wire [13:0] addr = {nyanframe, ny[4:0], nx[8:3]};
+    reg [2:0] idx;
+
+    always @* begin
+        if ((nx < 512) && (ny < 32)) begin
+            case(evo_state)
+                2'd0: idx = rom_mander[addr];
+                2'd1: idx = rom_melon[addr];
+                2'd2: idx = is_firing ? rom_fire[addr] : rom_zizard[addr];
+                default: idx = 0;
+            endcase
+        end else idx = 0;
+    end
+
+    // --- RAIN LOGIC ---
+    wire [9:0] rain_y = pix_y - (frame_count << 1);
+    wire rain = (idx == 0) && (pix_x[6:1] == line_lfsr[6:1]) && (rain_y[5:0] < 12);
+
+    // --- MAIN CONTROL BLOCK ---
+    always @(posedge clk or negedge rst_n) begin
+        if (~rst_n) begin
+            frame_count <= 0; nyanframe <= 0; evo_state <= 0;
+            pattern_cnt <= 0; flash_tmr <= 0; line_lfsr <= 7'h5a;
+        end else begin
+            if (pix_x == 0 && pix_y == 0) begin
+                u_prev <= g_up; d_prev <= g_down;
+                if (flash_tmr > 0) flash_tmr <= flash_tmr - 1;
+                is_firing <= (evo_state == 2'd2) && (g_up && g_down);
+
+                // Pattern tiến hóa: Up 16 lần -> Cấp 1, Up tiếp 36 lần -> Cấp 2
+                if (g_up && !u_prev) begin 
+                    pattern_cnt <= pattern_cnt + 1;
+                    if (evo_state==0 && pattern_cnt>=15) begin evo_state<=1; pattern_cnt<=0; flash_tmr<=45; end
+                    if (evo_state==1 && pattern_cnt>=35) begin evo_state<=2; pattern_cnt<=0; flash_tmr<=45; end
+                end else if (g_down && !d_prev) pattern_cnt <= 0;
+
+                frame_count <= frame_count + 1;
+                if (frame_count[1:0] == 0) nyanframe <= (nyanframe == 5) ? 0 : nyanframe + 1;
+                line_lfsr <= 7'h5a;
+            end else if (pix_x == 0 && pix_y[3:0] == 0) begin
+                line_lfsr <= line_lfsr_next;
+            end
+
+            // --- XUẤT MÀU VÀ HIỂN THỊ NỀN ---
+            if (flash_tmr > 0) begin
+                {R, G, B} <= 6'b111111; // Chớp trắng khi tiến hóa
+            end else if (video_active) begin
+                if (idx != 0) begin
+                    // Hiển thị nhân vật
+                    R <= pal_r[idx][3:2]; G <= pal_g[idx][3:2]; B <= pal_b[idx][3:2];
+                end else if (rain) begin
+                    // Hiển thị hạt mưa
+                    R <= 2'b10; G <= 2'b10; B <= 2'b11;
+                end else begin
+                    // HIỂN THỊ NỀN (TRỜI & CỎ)
+                    if (pix_y < 350) begin
+                        R <= 2'b00; G <= 2'b00; B <= 2'b01; // Trời tím than
+                    end else begin
+                        R <= 2'b00; G <= 2'b01; B <= 2'b00; // THẢM CỎ XANH LÁ
+                    end
+                end
+            end else begin
+                {R, G, B} <= 6'b000000;
+            end
         end
-      end
     end
-  endtask
 
-  always @(posedge clk or negedge rst_n) begin
-    if (~rst_n) begin
-      frame_count <= 0; nyanframe <= 0; cos <= 63; sin <= 0;
-      sqr_pha <= 0; bass_pha <= 0; song_loops <= 0; songpos <= 9'h1FF; // -1
-      sample_beat_ctr <= 0; sqr_vol <= 0; bass_vol <= 0;
-      audio_pwm_accum <= 0; R <= 0; G <= 0; B <= 0;
-     end else begin
-      if (pix_x == 0) begin
-        // Audio sampling & Ticking
-        sqr_pha <= sqr_pha + {4'b0, sqr_inc};
-        bass_pha <= bass_pha + {7'b0, bass_inc};
-        audio_sample_lpf <= audio_sample_lpf + audio_sample - (audio_sample_lpf>>3);
-        if (pix_y == 0) new_tick;
+    assign uio_out = 8'b0; assign uio_oe = 8'b0;
+    wire _unused = &{ena, ui_in[7], ui_in[3:0], uio_in, g_start};
+endmodule
 
-        if (pix_y == 0) begin
-          frame_count <= frame_count + 1;
-          if (frame_count[1:0] == 0) nyanframe <= (nyanframe == 5) ? 0 : nyanframe + 1;
-          cos <= cos_;
-          sin <= sin_;
-          line_lfsr <= 7'h5a;
-        end else if (pix_y[2:0] == 0) begin
-          line_lfsr <= line_lfsr_next;
-        end
-      end
-      audio_pwm_accum <= audio_pwm_accum_next;
+// --- SUB-MODULES ---
 
-      // Final VGA Signal Output
-      R <= video_active ? dr[3:2] : 2'b0;
-      G <= video_active ? dg[3:2] : 2'b0;
-      B <= video_active ? db[3:2] : 2'b0;
+module hvsync_generator (
+    input wire clk, reset,
+    output wire hsync, vsync, display_on,
+    output reg [9:0] hpos, vpos
+);
+    always @(posedge clk) begin
+        if (reset) begin hpos <= 0; vpos <= 0; end
+        else if (hpos == 799) begin
+            hpos <= 0;
+            if (vpos == 524) vpos <= 0;
+            else vpos <= vpos + 1;
+        end else hpos <= hpos + 1;
     end
-  end
+    assign hsync = ~(hpos >= 656 && hpos < 752);
+    assign vsync = ~(vpos >= 490 && vpos < 492);
+    assign display_on = (hpos < 640 && vpos < 480);
+endmodule
 
-  // Suppress unused signals
-  wire _unused_ok = &{ena, ui_in, uio_in};
-
+module gamepad_pmod_single (
+    input wire rst_n, clk, pmod_data, pmod_clk, pmod_latch,
+    output wire start, up, down
+);
+    reg [1:0] d_s, c_s, l_s;
+    reg c_l, l_l;
+    reg [11:0] s_reg;
+    reg [2:0] btns;
+    always @(posedge clk) begin
+        d_s <= {d_s[0], pmod_data}; c_s <= {c_s[0], pmod_clk}; l_s <= {l_s[0], pmod_latch};
+        c_l <= c_s[1]; l_l <= l_s[1];
+        if (c_s[1] && !c_l) s_reg <= {s_reg[10:0], d_s[1]};
+        if (l_s[1] && !l_l) btns <= (s_reg == 12'hfff) ? 3'b000 : s_reg[8:6];
+    end
+    assign {start, up, down} = btns;
 endmodule

@@ -5,7 +5,7 @@
 
 `default_nettype none
 
-module tt_um_a1k0n_nyancat(
+module tt_um_datdt_charizard(
     input  wire [7:0] ui_in,    // Gamepad: [6]=Data, [5]=Clk, [4]=Latch
     output wire [7:0] uo_out,   // VGA: {hsync, B0, G0, R0, vsync, B1, G1, R1}
     input  wire [7:0] uio_in,
@@ -65694,24 +65694,6 @@ module tt_um_a1k0n_nyancat(
 endmodule
 
 // --- SUB-MODULES ---
-
-module hvsync_generator (
-    input wire clk, reset,
-    output wire hsync, vsync, display_on,
-    output reg [9:0] hpos, vpos
-);
-    always @(posedge clk) begin
-        if (reset) begin hpos <= 0; vpos <= 0; end
-        else if (hpos == 799) begin
-            hpos <= 0;
-            if (vpos == 524) vpos <= 0;
-            else vpos <= vpos + 1;
-        end else hpos <= hpos + 1;
-    end
-    assign hsync = ~(hpos >= 656 && hpos < 752);
-    assign vsync = ~(vpos >= 490 && vpos < 492);
-    assign display_on = (hpos < 640 && vpos < 480);
-endmodule
 
 module gamepad_pmod_single (
     input wire rst_n, clk, pmod_data, pmod_clk, pmod_latch,
