@@ -71,7 +71,7 @@ module tt_um_datdt_charizard(
     end
 
     wire [13:0] addr = {nyanframe, ny[4:0], nx[8:3]};
-    reg [2:0] idx;
+    reg [3:0] idx;
 
     always @* begin
         if ((nx < 512) && (ny < 32)) begin
