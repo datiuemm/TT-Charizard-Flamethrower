@@ -47,7 +47,7 @@ module tt_um_datdt_charizard(
     initial begin
         $readmemh("../data/mander.hex", rom_mander);
         $readmemh("../data/melon.hex", rom_melon);
-        $readmemh("../data/zizard.hex", rom_zizard); // Sửa đúng tên zizard
+        $readmemh("../data/zizard.hex", rom_zizard); 
         $readmemh("../data/fire.hex",   rom_fire);
         $readmemh("../data/palette_r.hex", pal_r);
         $readmemh("../data/palette_g.hex", pal_g);
