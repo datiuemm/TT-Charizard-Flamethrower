@@ -2,7 +2,8 @@
  * Project: Nyan Cat Evolution (Mander -> Melon -> Zizard)
  * Features: Rain effect, Evolution Logic, Fixed Ground/Sky rendering
  */
-
+/* verilator lint_off PINMISSING */
+/* verilator lint_off UNUSEDSIGNAL */
 `default_nettype none
 
 module tt_um_datdt_charizard(
@@ -157,3 +158,5 @@ module gamepad_pmod_single (
     end
     assign {start, up, down} = btns;
 endmodule
+/* verilator lint_on PINMISSING */
+/* verilator lint_on UNUSEDSIGNAL */
