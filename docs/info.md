@@ -7,25 +7,31 @@ You can also include images in this folder and reference them in the markdown. E
 512 kb in size, and the combined size of all images must be less than 1 MB.
 -->
 
-# VGA nyan cat
 
-![nyancat preview](preview.png)
+
+# VGA Charizard Flamethrower
+
+![Picture preview](preview.png)
 
 ## How it works
 
-Outputs nyancat on VGA with music!
+Outputs Charizard on VGA with a flamethrower animation!
 
-Colors and animation are all from the original nyan.cat site, using a 2x2 Bayer
-dithering matrix which inverts on alternate frames for better color rendition on
-the Tiny VGA Pmod.
+Colors and animation are inspired by classic retro pixel-art styles.
 
-Sound is generated from a MIDI file, split into melody and bass parts. Melody
-and bass are each square waves mixed with a simple exponential decay envelope,
-which is then fed to a low-pass filter and then a sigma-delta DAC.
+The animation system combines sprite ROM lookups, palette mapping, and state-based rendering logic to display Charizard, flame effects, and projectile animations in real time.
 
-This was designed to fit into 1 tile, and it *almost* did -- the cells take up
-about 93% of 1 tile, but detailed routing doesn't finish. With the deadline
-approaching I was forced to grow it to 1x2, so I threw in a little easter egg.
+Originally, this project was planned to include the full evolution line animation. However, that required four large sprite ROMs, and fitting all four would likely have pushed the design close to a 4x4 tile area, so I eventually gave up on that idea to keep the project small enough to route successfully.
+
+With the deadline approaching, I was forced to using 1x2 to complete timing and routing closure.
+
+## Why Charizard
+
+My first Pokémon from Kanto - Gen 1
+
+## Why rain?  
+
+Inspired by the scene in Pokémon where Ash/Satoshi first finds Charizard during a rainy scene. The rain adds a dramatic mood to the moment, emphasizing the intensity of the encounter and Charizard’s wild, untamed behavior at that time.
 
 ## How to test
 
@@ -33,8 +39,12 @@ Set clock to 25.175MHz or thereabouts, give reset pulse, and enjoy
 
 ## External hardware
 
-[TinyVGA Pmod](https://github.com/mole99/tiny-vga) for video on o[7:0].
+All built-in, we are all in-house, no need to outsource, because we are strong enough.
 
-1-bit sound on io[7], compatible with [Tiny Tapeout Audio
-Pmod](https://github.com/MichaelBell/tt-audio-pmod), or any basic ~20kHz RC filter
-on io7 to an amplifier will work.
+## Acknowledgements
+
+Thanks to the Tiny Tapeout community for help!!!
+
+Special thanks to a1k0n and his nyan cat repo, what a special methodology (I forked from his repo ^^).
+
+And also kohai Pham Van Chien from Vietnam National University for scripts.

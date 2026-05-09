@@ -1,8 +1,8 @@
 ![](../../workflows/gds/badge.svg) ![](../../workflows/docs/badge.svg) ![](../../workflows/test/badge.svg) ![](../../workflows/fpga/badge.svg)
 
-# Tiny Tapeout Nyan Cat
+# Tiny Tapeout Charizard Flamethrower
 
-A 1x2 tile VGA nyan cat with sound hacked together the day before the Tiny Tapeout 8 deadline.
+A 1x2 tile VGA Charizard Flamethrower.
 
 - [Read the documentation for project](docs/info.md)
 

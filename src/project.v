@@ -1,11 +1,12 @@
 /*
- * Project: Fire Only (Optimized for Congestion)
- * Features: Fire breathing effect, Rain, Fixed Ground/Sky
+ * Copyright (c) 2024 Andy Sloane
+ * SPDX-License-Identifier: Apache-2.0
+ * Edited by Dat Dinh Trong
  */
 `default_nettype none
 
 module tt_um_datdt_charizard(
-    input  wire [7:0] ui_in,    // [0] làm nút kích hoạt lửa
+    input  wire [7:0] ui_in,   
     output wire [7:0] uo_out,   // VGA: {hsync, B0, G0, R0, vsync, B1, G1, R1}
     input  wire [7:0] uio_in,
     output wire [7:0] uio_out,
@@ -24,11 +25,8 @@ module tt_um_datdt_charizard(
         .display_on(video_active), .hpos(pix_x), .vpos(pix_y)
     );
 
-    // --- SIMPLE FIRE CONTROL ---
-    // Sử dụng switch ui_in[0] thay vì module gamepad phức tạp
     wire is_firing = 1; 
 
-    // --- ROM & PALETTE (Fire Only) ---
     reg [2:0] rom_fire[0:16383];
     reg [3:0] pal_r[0:7], pal_g[0:7], pal_b[0:7];
 
@@ -45,13 +43,10 @@ module tt_um_datdt_charizard(
     reg [6:0] line_lfsr;
     wire [6:0] line_lfsr_next = {line_lfsr[0], line_lfsr[0]^line_lfsr[6], line_lfsr[5:1]};
 
-    // --- RENDERING LOGIC ---
-    // Giảm bớt các phép tính tọa độ phức tạp
     wire [13:0] addr = {nyanframe, (pix_y[7:3] - 5'd18), (pix_x[8:3] - 6'd8)};
     reg [2:0] idx;
 
     always @* begin
-        // Chỉ vẽ khi nằm trong vùng hiển thị của Fire và nút được bấm
         if (is_firing && (pix_x >= 64 && pix_x < 512) && (pix_y >= 144 && pix_y < 400)) begin
             idx = rom_fire[addr];
         end else begin
@@ -59,11 +54,9 @@ module tt_um_datdt_charizard(
         end
     end
 
-    // --- RAIN LOGIC ---
     wire [9:0] rain_y = pix_y - (frame_count << 1);
     wire rain = (idx == 0) && (pix_x[6:1] == line_lfsr[6:1]) && (rain_y[5:0] < 12);
 
-    // --- MAIN CONTROL BLOCK ---
     always @(posedge clk or negedge rst_n) begin
         if (~rst_n) begin
             frame_count <= 0; 
@@ -79,18 +72,16 @@ module tt_um_datdt_charizard(
                 line_lfsr <= line_lfsr_next;
             end
 
-            // --- COLOR OUTPUT ---
             if (video_active) begin
                 if (idx != 0) begin
                     R <= pal_r[idx][3:2]; G <= pal_g[idx][3:2]; B <= pal_b[idx][3:2];
                 end else if (rain) begin
-                    R <= 2'b10; G <= 2'b10; B <= 2'b11; // Hạt mưa
+                    R <= 2'b10; G <= 2'b10; B <= 2'b11; 
                 end else begin
-                    // Background đơn giản: Trời & Đất
                     if (pix_y < 350) begin
-                        R <= 2'b00; G <= 2'b00; B <= 2'b01; // Sky
+                        R <= 2'b00; G <= 2'b00; B <= 2'b01; 
                     end else begin
-                        R <= 2'b00; G <= 2'b01; B <= 2'b00; // Grass
+                        R <= 2'b00; G <= 2'b01; B <= 2'b00; 
                     end
                 end
             end else begin
