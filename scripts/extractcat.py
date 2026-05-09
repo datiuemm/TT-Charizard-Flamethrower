@@ -1,7 +1,7 @@
 import numpy as np
 from PIL import Image
 from gamma import gamma_correct, dither_correct
-
+import os
 # -------------------------------------------------------
 # Config
 # -------------------------------------------------------
