@@ -1,6 +1,6 @@
 # Tiny Tapeout project information
 project:
-  title:        "VGA Charmander Evolution"      # Project title
+  title:        "IEEE VGA Charizard Flamethrower"      # Project title
   author:       "Dat Dinh Trong"      # Your name
   discord:      "datiuemm"      # Your discord username, for communication and automatically assigning you a Tapeout role (optional)
   description:  "Displays the Charizard on VGA with a flamethrower animation!"      # One line description of what your project does
